@@ -1,56 +1,25 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
-from bson import ObjectId
+# routers/admin_router.py
+from fastapi import APIRouter, Depends
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from utils.auth_service import get_current_user_id
-from database.databaseMongo import professional_collection, user_collection
-from schemas.professional_schema import ProfessionalProfileOut, VerificationStatus
-from .professionals_router import profile_helper # Reutilizamos el helper
+from database.databaseMongo import get_db
+from schemas.dashboard_schema import DashboardStats
+from services import admin_service
 
-# --- Dependencia de Admin ---
-async def require_admin(user_id: str = Depends(get_current_user_id)):
-    """Dependencia que verifica si el usuario tiene el rol de 'admin'."""
-    user = await user_collection.find_one({"_id": ObjectId(user_id)})
-    if not user or user.get("role") != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Se requiere rol de administrador."
-        )
-    return user_id
+router = APIRouter(prefix="/admin", tags=["Admin"])
 
-# --- Router de Admin ---
-router = APIRouter(
-    prefix="/admin", 
-    tags=["Admin"],
-    dependencies=[Depends(require_admin)] # ¡Protegemos todas las rutas de este router!
-)
-
-@router.get("/verifications/pending", response_model=List[ProfessionalProfileOut])
-async def get_pending_verifications():
-    """Obtiene todos los perfiles de profesionales pendientes de verificación."""
-    profiles = []
-    query = {"verification_status": VerificationStatus.PENDING}
-    async for profile in professional_collection.find(query):
-        user = await user_collection.find_one({"_id": profile["user_id"]})
-        if user:
-            profiles.append(profile_helper(profile, user))
-    return profiles
-
-@router.patch("/verifications/{prof_user_id}/approve", status_code=status.HTTP_204_NO_CONTENT)
-async def approve_verification(prof_user_id: str):
-    """Aprueba la verificación de un profesional."""
-    await professional_collection.update_one(
-        {"user_id": ObjectId(prof_user_id)},
-        {"$set": {"verification_status": VerificationStatus.VERIFIED}}
+@router.get("/stats", response_model=DashboardStats)
+async def get_dashboard_stats(db: AsyncIOMotorDatabase = Depends(get_db)):
+    total_users = await admin_service.get_total_users(db)
+    total_professionals = await admin_service.get_total_professionals(db)
+    total_jobs = await admin_service.get_total_jobs(db)
+    jobs_by_state = await admin_service.get_jobs_by_state(db)
+    professionals_by_category = await admin_service.get_professionals_by_category(db)
+    
+    return DashboardStats(
+        total_users=total_users,
+        total_professionals=total_professionals,
+        total_jobs=total_jobs,
+        jobs_by_state=jobs_by_state,
+        professionals_by_category=professionals_by_category,
     )
-    # 204 significa "OK, lo hice, pero no te devuelvo nada en el cuerpo"
-    return
-
-@router.patch("/verifications/{prof_user_id}/reject", status_code=status.HTTP_204_NO_CONTENT)
-async def reject_verification(prof_user_id: str):
-    """Rechaza la verificación de un profesional."""
-    await professional_collection.update_one(
-        {"user_id": ObjectId(prof_user_id)},
-        {"$set": {"verification_status": VerificationStatus.REJECTED}}
-    )
-    return

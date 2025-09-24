@@ -1,14 +1,17 @@
-from pydantic import BaseModel
-from typing import List
+# schemas/dashboard_schema.py
+from pydantic import BaseModel, Field
+from typing import List, Any
 
-class UltimaResena(BaseModel):
-    rating: int
-    comment: str
+class AggregationResult(BaseModel):
+    id: Any = Field(..., alias='_id')
+    count: int
 
-class DashboardOut(BaseModel):
-    total_ingresos: float
-    trabajos_completados: int
-    trabajos_en_progreso: int
-    rating_promedio: float
-    total_resenas: int
-    ultimas_resenas: List[UltimaResena]
+    class Config:
+        populate_by_name = True
+
+class DashboardStats(BaseModel):
+    total_users: int
+    total_professionals: int
+    total_jobs: int
+    jobs_by_state: List[AggregationResult]
+    professionals_by_category: List[AggregationResult]

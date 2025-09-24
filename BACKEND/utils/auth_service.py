@@ -1,11 +1,17 @@
+# utils/auth_service.py
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from motor.motor_asyncio import AsyncIOMotorDatabase
+
 from core.config import settings
 from schemas.token_schema import TokenData
+from schemas.user_schemas import UserOut
+from database.databaseMongo import get_db
+from services import user_service
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -20,16 +26,21 @@ def verify_access_token(token: str, credentials_exception):
         user_id: str = payload.get("user_id")
         if user_id is None:
             raise credentials_exception
-        token_data = TokenData(id=user_id)
+        return TokenData(id=user_id)
     except JWTError:
         raise credentials_exception
-    return token_data
 
-def get_current_user_id(token: str = Depends(oauth2_scheme)):
+async def get_current_user(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    token: str = Depends(oauth2_scheme)
+) -> UserOut:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No se pudieron validar las credenciales",
         headers={"WWW-Authenticate": "Bearer"},
     )
     token_data = verify_access_token(token, credentials_exception)
-    return token_data.id
+    user = await user_service.get_user_by_id(db, user_id=token_data.id)
+    if user is None:
+        raise credentials_exception
+    return UserOut(**user)

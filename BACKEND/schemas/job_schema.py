@@ -1,8 +1,9 @@
-from pydantic import BaseModel, constr
+# schemas/job_schema.py
+from pydantic import BaseModel, constr, Field
 from datetime import datetime
 from enum import Enum
+from typing import Optional
 
-# Usamos un Enum para tener estados predefinidos y evitar errores de tipeo.
 class JobStatus(str, Enum):
     POSTED = "posted"
     ACCEPTED = "accepted"
@@ -16,12 +17,20 @@ class JobBase(BaseModel):
     category: str
     budget: float
 
-class JobCreate(JobBase):
-    pass
+class JobIn(JobBase):
+    professional_id: str
+
+class JobUpdate(BaseModel):
+    title: Optional[constr(min_length=5, max_length=100)] = None
+    description: Optional[constr(max_length=2000)] = None
+    category: Optional[str] = None
+    budget: Optional[float] = None
+    status: Optional[JobStatus] = None
 
 class JobOut(JobBase):
-    id: str
+    id: str = Field(..., alias="_id")
     client_id: str
+    professional_id: str
     status: JobStatus
     created_at: datetime
 
